@@ -1,0 +1,347 @@
+---
+title: "CSC4007 - Lab 5: Transformer Fine-tuning với Weights & Biases"
+author: "Khoa Công nghệ thông tin"
+output:
+  html_document:
+    toc: false
+    number_sections: true
+    theme: readable
+---
+
+# Giới thiệu bài thực hành
+
+Sau Lab 3 và Lab 4, chúng ta đã xây dựng một chuỗi thực hành tương đối liền mạch cho bài toán phân loại cảm xúc trên IMDB.
+
+Ở Lab 3, sinh viên bắt đầu chuyển từ biểu diễn BoW/TF-IDF sang biểu diễn văn bản dưới dạng chuỗi token, sau đó dùng mô hình `Embedding + RNN`. Ở Lab 4, sinh viên tiếp tục nâng cấp RNN thành LSTM/GRU/BiLSTM để xử lý phụ thuộc dài tốt hơn.
+
+Trong Lab 5, chúng ta tiếp tục giữ nguyên case study phân loại cảm xúc, nhưng thay đổi cách tiếp cận mô hình: thay vì huấn luyện mô hình chuỗi từ đầu, sinh viên sẽ sử dụng một **Transformer pretrained** và fine-tune mô hình đó cho bài toán cụ thể.
+
+Mục tiêu của bài lab không chỉ là chạy được mô hình Transformer, mà còn là biết cách so sánh công bằng với LSTM/GRU, biết đọc log W&B, hiểu ảnh hưởng của tokenizer và `max_length`, đồng thời phân tích các trường hợp mô hình dự đoán sai.
+
+# Mục tiêu bài thực hành
+
+Sau bài lab này, sinh viên cần đạt được các mục tiêu sau:
+
+1. Hiểu pipeline cơ bản của Transformer fine-tuning cho text classification.
+2. Sử dụng `AutoTokenizer` và `AutoModelForSequenceClassification` của Hugging Face.
+3. Fine-tune `distilbert-base-uncased` cho bài toán phân loại cảm xúc IMDB.
+4. Sử dụng Weights & Biases để theo dõi thí nghiệm.
+5. So sánh Transformer với LSTM/GRU ở Lab 4.
+6. Thực hiện ablation tối thiểu 2 biến thể.
+7. Phân tích lỗi mô hình trên ít nhất 10 mẫu dự đoán sai.
+8. Với sinh viên khá/giỏi, thử thêm partial fine-tuning, freeze encoder hoặc LoRA/PEFT.
+
+# Kiến thức cần nắm trước khi làm lab
+
+Sinh viên cần ôn lại:
+
+- tokenization;
+- padding và truncation;
+- attention mask;
+- train/validation/test split;
+- accuracy và macro-F1;
+- overfitting;
+- learning curves;
+- cách đọc confusion matrix;
+- cách dùng GitHub và W&B.
+
+# Ý tưởng chính của Lab 5
+
+Pipeline của Lab 5 có thể tóm tắt như sau:
+
+```text
+Raw text
+→ Transformer tokenizer
+→ input_ids + attention_mask
+→ pretrained Transformer
+→ classification head
+→ sentiment label
+```
+
+So với Lab 4:
+
+```text
+Token ID
+→ Embedding
+→ LSTM/GRU
+→ classifier
+```
+
+Transformer có lợi thế ở chỗ mô hình đã được pretrain và có cơ chế self-attention, giúp mỗi token có thể học quan hệ với các token khác trong cùng văn bản.
+
+# Chuẩn bị môi trường
+
+Clone repo:
+
+```bash
+git clone https://github.com/<username>/<repo-name>.git
+cd <repo-name>
+```
+
+Kích hoạt môi trường:
+
+```bash
+conda activate csc4007-nlp
+```
+
+Cài thư viện:
+
+```bash
+pip install -r requirements.txt
+```
+
+Nếu dùng W&B online:
+
+```bash
+wandb login
+```
+
+# Chạy smoke test
+
+Trước khi chạy IMDB thật, nên chạy smoke test với dữ liệu nhỏ:
+
+```bash
+python run_lab5.py \
+  --dataset local_csv \
+  --data_path data/raw/sample_imdb_tiny.csv \
+  --model_name hf-internal-testing/tiny-random-distilbert \
+  --max_rows 40 \
+  --max_length 64 \
+  --batch_size 4 \
+  --epochs 1 \
+  --lr 5e-5 \
+  --wandb_mode offline \
+  --use_wandb
+```
+
+Smoke test chỉ dùng để kiểm tra pipeline. Không dùng kết quả này để kết luận mô hình tốt hay không.
+
+# Chạy baseline Transformer
+
+Baseline bắt buộc của bài lab là:
+
+```text
+distilbert-base-uncased + full fine-tuning
+```
+
+Lệnh chạy:
+
+```bash
+python run_lab5.py \
+  --dataset imdb \
+  --model_name distilbert-base-uncased \
+  --seed 42 \
+  --max_length 256 \
+  --batch_size 16 \
+  --epochs 3 \
+  --lr 2e-5 \
+  --weight_decay 0.01 \
+  --use_wandb \
+  --run_name distilbert_full_finetune_baseline
+```
+
+Nếu máy yếu, có thể chạy bản nhỏ trước:
+
+```bash
+python run_lab5.py \
+  --dataset imdb \
+  --model_name distilbert-base-uncased \
+  --max_rows 1000 \
+  --max_length 128 \
+  --batch_size 8 \
+  --epochs 1 \
+  --wandb_mode offline \
+  --use_wandb
+```
+
+# Sử dụng W&B
+
+Khi chạy với `--use_wandb`, hệ thống sẽ log:
+
+- cấu hình mô hình;
+- số tham số trainable;
+- `train_loss`;
+- `val_loss`;
+- `val_accuracy`;
+- `val_macro_f1`;
+- thông tin tokenizer và `max_length`.
+
+Sinh viên cần đặt tên run rõ ràng, ví dụ:
+
+```bash
+--run_name maxlen_128
+```
+
+hoặc:
+
+```bash
+--run_name freeze_encoder
+```
+
+# Các biến thể bắt buộc
+
+Sinh viên cần chạy ít nhất 2 biến thể ngoài baseline.
+
+## Biến thể 1: Thay đổi max_length
+
+Ví dụ:
+
+```bash
+python run_lab5.py \
+  --dataset imdb \
+  --model_name distilbert-base-uncased \
+  --max_length 128 \
+  --batch_size 16 \
+  --epochs 3 \
+  --lr 2e-5 \
+  --use_wandb \
+  --run_name maxlen_128
+```
+
+Cần so sánh với `max_length = 256`.
+
+## Biến thể 2: Freeze encoder
+
+```bash
+python run_lab5.py \
+  --dataset imdb \
+  --model_name distilbert-base-uncased \
+  --freeze_encoder \
+  --max_length 256 \
+  --batch_size 16 \
+  --epochs 3 \
+  --lr 2e-5 \
+  --use_wandb \
+  --run_name freeze_encoder
+```
+
+Ý nghĩa: chỉ train classification head, không cập nhật toàn bộ Transformer.
+
+## Biến thể 3: Partial fine-tuning
+
+```bash
+python run_lab5.py \
+  --dataset imdb \
+  --model_name distilbert-base-uncased \
+  --freeze_encoder \
+  --unfreeze_last_n_layers 2 \
+  --max_length 256 \
+  --batch_size 16 \
+  --epochs 3 \
+  --lr 2e-5 \
+  --use_wandb \
+  --run_name unfreeze_last_2_layers
+```
+
+Ý nghĩa: freeze phần lớn encoder, nhưng cho phép cập nhật một vài layer cuối.
+
+# Phần nâng cao cho sinh viên khá/giỏi
+
+## LoRA/PEFT
+
+```bash
+python run_lab5.py \
+  --dataset imdb \
+  --model_name distilbert-base-uncased \
+  --use_lora \
+  --lora_r 8 \
+  --lora_alpha 16 \
+  --lora_dropout 0.1 \
+  --lora_target_modules q_lin,v_lin \
+  --max_length 256 \
+  --batch_size 16 \
+  --epochs 3 \
+  --lr 2e-5 \
+  --use_wandb \
+  --run_name lora_distilbert
+```
+
+Với BERT-base, có thể cần đổi `lora_target_modules` thành:
+
+```bash
+--lora_target_modules query,value
+```
+
+## Gradient accumulation
+
+Nếu máy yếu:
+
+```bash
+python run_lab5.py \
+  --dataset imdb \
+  --model_name distilbert-base-uncased \
+  --batch_size 4 \
+  --grad_accum_steps 4 \
+  --max_length 256 \
+  --epochs 3 \
+  --lr 2e-5 \
+  --use_wandb \
+  --run_name grad_accum
+```
+
+# Các output cần kiểm tra
+
+Sau khi chạy xong, kiểm tra các file sau:
+
+```text
+outputs/logs/tokenization_audit.md
+outputs/metrics/epoch_history.csv
+outputs/metrics/metrics_summary.json
+outputs/metrics/metrics_summary.md
+outputs/metrics/model_comparison.csv
+outputs/figures/loss_curve.png
+outputs/figures/metric_curve.png
+outputs/figures/confusion_matrix.png
+outputs/predictions/test_predictions.csv
+outputs/error_analysis/error_analysis.csv
+outputs/error_analysis/error_analysis_summary.md
+outputs/models/best_model/
+```
+
+# So sánh với Lab 4
+
+Nếu có file kết quả Lab 4:
+
+```bash
+python run_lab5.py \
+  --dataset imdb \
+  --model_name distilbert-base-uncased \
+  --lab4_metrics_path /path/to/lab4/outputs/metrics/metrics_summary.json \
+  --use_wandb
+```
+
+Sinh viên cần trả lời:
+
+1. Transformer có tốt hơn LSTM/GRU không?
+2. Metric nào cải thiện rõ nhất?
+3. Transformer vẫn sai ở những mẫu nào?
+4. Việc tăng `max_length` có giúp cải thiện không?
+5. Fine-tuning toàn bộ có tốt hơn freeze encoder không?
+
+# Yêu cầu nộp bài
+
+Sinh viên cần nộp repo GitHub cá nhân gồm:
+
+- mã nguồn đã chạy được;
+- `reports/analysis_report.md` đã điền đầy đủ;
+- output metrics;
+- learning curves;
+- confusion matrix;
+- error analysis;
+- bảng ablation;
+- link hoặc tên W&B run;
+- mô tả phần nâng cao nếu có.
+
+# Câu hỏi thảo luận cuối bài
+
+1. Vì sao Transformer có thể xử lý phụ thuộc dài tốt hơn RNN/LSTM/GRU?
+2. `max_length` ảnh hưởng như thế nào đến kết quả và thời gian chạy?
+3. Khi nào nên freeze encoder?
+4. Khi nào nên full fine-tuning?
+5. PEFT/LoRA phù hợp trong trường hợp nào?
+6. Transformer có giải quyết hết lỗi của LSTM/GRU không?
+7. Nếu triển khai trên máy yếu, bạn chọn cấu hình nào?
+
+# Kết luận
+
+Lab 5 là bước chuyển từ mô hình chuỗi huấn luyện từ đầu sang mô hình pretrained Transformer. Qua bài lab này, sinh viên cần hiểu rằng kết quả tốt không chỉ đến từ việc chọn mô hình mạnh hơn, mà còn đến từ cách tokenize dữ liệu, chọn `max_length`, quản lý learning rate, theo dõi thí nghiệm bằng W&B và phân tích lỗi một cách có hệ thống.

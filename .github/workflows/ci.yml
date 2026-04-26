@@ -1,0 +1,28 @@
+name: lab5-ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  structure-and-syntax:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Check required files
+        run: |
+          test -f README.md
+          test -f run_lab5.py
+          test -f requirements.txt
+          test -f reports/analysis_report.md
+          test -f reports/rubric.md
+          test -f src/data.py
+          test -f src/modeling.py
+          test -f src/train_transformer.py
+          test -f src/wandb_utils.py
+      - name: Python syntax check
+        run: |
+          python -m py_compile run_lab5.py src/*.py

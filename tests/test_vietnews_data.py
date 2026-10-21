@@ -19,7 +19,7 @@ class VietNewsDataTest(unittest.TestCase):
                 ]
                 pd.DataFrame(rows).to_csv(root / f"{part}.csv", index=False)
             splits, names = prepare_splits("local_csv", split_dir=str(root))
-            self.assertEqual(names, list(topics))
+            self.assertEqual(names, sorted(topics))
             self.assertEqual(len(splits["train"]), 18)
             self.assertIn("source", splits["test"])
             self.assertIn("title", splits["test"])

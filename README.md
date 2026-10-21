@@ -210,7 +210,7 @@ python run_lab5.py \
 
 ## Các biến thể bắt buộc cho sinh viên
 
-Sinh viên phải chạy ít nhất 2 biến thể ngoài baseline.
+Sinh viên chạy ít nhất **1 biến thể IMDB** ngoài baseline; sau đó thực hiện Part B với VietNewsSense.
 
 ### Biến thể 1 — Thay đổi `max_length`
 
@@ -228,7 +228,7 @@ python run_lab5.py \
 
 Sau đó so sánh với `max_length=256`.
 
-### Biến thể 2 — Freeze encoder
+### Biến thể 2 — Freeze encoder (tự chọn)
 
 ```bash
 python run_lab5.py \
@@ -245,7 +245,7 @@ python run_lab5.py \
 
 Biến thể này giúp trả lời câu hỏi: nếu chỉ train classification head, kết quả có đủ tốt không?
 
-### Biến thể 3 — Partial fine-tuning
+### Biến thể 3 — Partial fine-tuning (tự chọn)
 
 ```bash
 python run_lab5.py \
@@ -361,7 +361,7 @@ Sau khi chạy xong, repo sinh ra:
 
 1. Chạy thành công baseline `distilbert-base-uncased`.
 2. Sử dụng W&B để log ít nhất 2 runs.
-3. Thử ít nhất 2 biến thể có kiểm soát.
+3. Thử ít nhất 1 biến thể trên IMDB, đồng thời hoàn thành VietNewsSense Transfer Challenge.
 4. Hoàn thành bảng ablation trong `reports/analysis_report.md`.
 5. So sánh với mô hình tốt nhất của Lab 4.
 6. Phân tích ít nhất 10 mẫu sai.
@@ -409,7 +409,7 @@ CI giúp kiểm tra repo có chạy được hay không, nhưng không thay th�
 **Mục tiêu:** chuyển từ DistilBERT + IMDB (phân loại cảm xúc 2 nhãn) sang PhoBERT + VietNewsSense (phân loại chủ đề đa lớp). Kết quả đối chiếu với TF-IDF + Linear SVM của Lab 2 **trên cùng split**.
 
 ### Dữ liệu và nguồn so sánh
-- Dùng `outputs/vietnews_v1_segmented/splits/{train,val,test}.csv` và `outputs/vietnews_v1_segmented/metrics/metrics_summary.json` từ **cùng một run Lab 2**.
+- Ưu tiên dùng `outputs/vietnews_v0/splits/{train,val,test}.csv` (chưa word segmentation) và `outputs/vietnews_v0/metrics/metrics_summary.json` thuộc **cùng một run Lab 2**.
 - Tên cột khi xuất từ Lab 2 là `text` và `label`. CSV gốc có thể dùng `content` và `category`; các metadata như `id,title,source` được giữ lại.
 - Giữ nguyên train/val/test; **không dùng --max_rows với --split_dir**, không resplit hoặc chọn hyperparameters theo test.
 - Nếu Lab 2 đã segment bằng underthesea (`V1`), không dùng trực tiếp làm đầu vào PhoBERT khi muốn đúng pipeline VnCoreNLP: hãy dùng split V0 chưa segment, hoặc bản raw được chia theo cùng ID, chạy lại segmentation phù hợp, và dùng metric Lab 2 tương ứng với **chính split đó**. Nếu không chứng minh được trùng split và nguồn, chỉ trình bày hai kết quả riêng, không kết luận mô hình nào tốt hơn.
@@ -437,7 +437,7 @@ python run_lab5.py \
 
 **Các bước bắt buộc:** B1. Kiểm tra split, nhãn, metadata → B2. Audit tokenizer/truncation → B3. Fine-tune PhoBERT → B4. So sánh Macro-F1, accuracy và confusion matrix với Lab 2 trên cùng split → B5. Phân tích ít nhất 5 mẫu dự đoán sai.
 
-**Bản IMDB:** giữ nguyên lệnh chạy DistilBERT hiện có; bổ sung `--output_dir outputs/imdb` nếu muốn tách kết quả.
+**Bản IMDB:** giữ nguyên lệnh chạy DistilBERT hiện có; bổ sung `--output_dir outputs/imdb` nếu muốn tách kết quả. Không so sánh F1 giữa IMDB và VietNewsSense vì là hai nhiệm vụ khác nhau.
 
 **Output mới:** `outputs/vietnews_phobert/metrics/vietnews_comparison.csv`, `logs/id2label.json`, `logs/tokenization_audit.md`, `predictions/test_predictions.csv` (bao gồm xác suất từng nhãn), confusion matrix đa lớp và error analysis.
 

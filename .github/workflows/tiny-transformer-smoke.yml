@@ -40,3 +40,33 @@ jobs:
           test -f outputs/figures/confusion_matrix.png
           test -f outputs/predictions/test_predictions.csv
           test -f outputs/error_analysis/error_analysis.csv
+
+      - name: Train multiclass Vietnamese tiny smoke (3 labels)
+        env:
+          TOKENIZERS_PARALLELISM: false
+        run: |
+          python run_lab5.py \
+            --dataset local_csv \
+            --data_path data/raw/sample_vietnews_tiny.csv \
+            --text_col content --label_col category \
+            --language vi --vi_segment none \
+            --model_name hf-internal-testing/tiny-random-distilbert \
+            --max_length 64 --batch_size 4 --epochs 1 --lr 5e-5 \
+            --output_dir outputs/vietnews_smoke --wandb_mode disabled
+      - name: Validate multiclass artifacts
+        run: |
+          python - <<'PY'
+          import json
+          import pandas as pd
+          from pathlib import Path
+          p = Path('outputs/vietnews_smoke')
+          m = json.loads((p/'metrics/metrics_summary.json').read_text())
+          labels = json.loads((p/'logs/id2label.json').read_text())
+          pred = pd.read_csv(p/'predictions/test_predictions.csv')
+          assert m['num_labels'] == 3, m
+          assert len(labels) == 3 and len(pred) > 0
+          assert {'prob_label_0','prob_label_1','prob_label_2','confidence','source','title','pred_label_name'} <= set(pred.columns)
+          assert (p/'figures/confusion_matrix.png').is_file()
+          assert (p/'error_analysis/error_analysis.csv').is_file()
+          print("multiclass smoke PASS")
+          PY

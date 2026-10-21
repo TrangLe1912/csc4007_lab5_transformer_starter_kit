@@ -28,6 +28,19 @@ class VietNewsDataTest(unittest.TestCase):
             with self.assertRaises(ValueError):
                 prepare_splits("local_csv", split_dir=str(root), max_rows=4)
 
+    def test_unseen_classes_do_not_enter_validation(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for part, labs in {
+                "train": ["education", "sports", "education", "sports"],
+                "val": ["education"],
+                "test": ["novel"],
+            }.items():
+                pd.DataFrame([{"text": f"Ví dụ {i} của {label}", "label": label}
+                              for i, label in enumerate(labs)]).to_csv(root/f"{part}.csv",index=False)
+            with self.assertRaisesRegex(ValueError, "Train does not contain"):
+                prepare_splits("local_csv", split_dir=str(root))
+
 
 if __name__ == "__main__":
     unittest.main()

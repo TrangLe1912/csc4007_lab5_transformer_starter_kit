@@ -27,7 +27,7 @@ Sau bài lab này, sinh viên cần đạt được các mục tiêu sau:
 3. Fine-tune `distilbert-base-uncased` cho bài toán phân loại cảm xúc IMDB.
 4. Sử dụng Weights & Biases để theo dõi thí nghiệm.
 5. So sánh Transformer với LSTM/GRU ở Lab 4.
-6. Thực hiện ablation tối thiểu 2 biến thể.
+6. Thực hiện tối thiểu 1 ablation trên IMDB và chuyển giao sang VietNewsSense.
 7. Phân tích lỗi mô hình trên ít nhất 10 mẫu dự đoán sai.
 8. Với sinh viên khá/giỏi, thử thêm partial fine-tuning, freeze encoder hoặc LoRA/PEFT.
 
@@ -180,7 +180,7 @@ hoặc:
 
 # Các biến thể bắt buộc
 
-Sinh viên cần chạy ít nhất 2 biến thể ngoài baseline.
+Sinh viên cần chạy **ít nhất 1 biến thể IMDB** ngoài baseline; các biến thể còn lại là tùy chọn nâng cao.
 
 ## Biến thể 1: Thay đổi max_length
 
@@ -318,33 +318,6 @@ Sinh viên cần trả lời:
 4. Việc tăng `max_length` có giúp cải thiện không?
 5. Fine-tuning toàn bộ có tốt hơn freeze encoder không?
 
-# Yêu cầu nộp bài
-
-Sinh viên cần nộp repo GitHub cá nhân gồm:
-
-- mã nguồn đã chạy được;
-- `reports/analysis_report.md` đã điền đầy đủ;
-- output metrics;
-- learning curves;
-- confusion matrix;
-- error analysis;
-- bảng ablation;
-- link hoặc tên W&B run;
-- mô tả phần nâng cao nếu có.
-
-# Câu hỏi thảo luận cuối bài
-
-1. Vì sao Transformer có thể xử lý phụ thuộc dài tốt hơn RNN/LSTM/GRU?
-2. `max_length` ảnh hưởng như thế nào đến kết quả và thời gian chạy?
-3. Khi nào nên freeze encoder?
-4. Khi nào nên full fine-tuning?
-5. PEFT/LoRA phù hợp trong trường hợp nào?
-6. Transformer có giải quyết hết lỗi của LSTM/GRU không?
-7. Nếu triển khai trên máy yếu, bạn chọn cấu hình nào?
-
-# Kết luận
-
-Lab 5 là bước chuyển từ mô hình chuỗi huấn luyện từ đầu sang mô hình pretrained Transformer. Qua bài lab này, sinh viên cần hiểu rằng kết quả tốt không chỉ đến từ việc chọn mô hình mạnh hơn, mà còn đến từ cách tokenize dữ liệu, chọn `max_length`, quản lý learning rate, theo dõi thí nghiệm bằng W&B và phân tích lỗi một cách có hệ thống.
 
 
 # Part B — VietNewsSense Vietnamese Transfer Challenge
@@ -355,7 +328,7 @@ Lab 5 là bước chuyển từ mô hình chuỗi huấn luyện từ đầu san
 **Mục tiêu:** chuyển từ DistilBERT + IMDB (phân loại cảm xúc 2 nhãn) sang PhoBERT + VietNewsSense (phân loại chủ đề đa lớp). Kết quả đối chiếu với TF-IDF + Linear SVM của Lab 2 **trên cùng split**.
 
 ### Dữ liệu và nguồn so sánh
-- Dùng `outputs/vietnews_v1_segmented/splits/{train,val,test}.csv` và `outputs/vietnews_v1_segmented/metrics/metrics_summary.json` từ **cùng một run Lab 2**.
+- Ưu tiên dùng `outputs/vietnews_v0/splits/{train,val,test}.csv` và `outputs/vietnews_v0/metrics/metrics_summary.json` thuộc **cùng một run Lab 2**.
 - Tên cột khi xuất từ Lab 2 là `text` và `label`. CSV gốc có thể dùng `content` và `category`; các metadata như `id,title,source` được giữ lại.
 - Giữ nguyên train/val/test; **không dùng --max_rows với --split_dir**, không resplit hoặc chọn hyperparameters theo test.
 - Nếu Lab 2 đã segment bằng underthesea (`V1`), không dùng trực tiếp làm đầu vào PhoBERT khi muốn đúng pipeline VnCoreNLP: hãy dùng split V0 chưa segment, hoặc bản raw được chia theo cùng ID, chạy lại segmentation phù hợp, và dùng metric Lab 2 tương ứng với **chính split đó**. Nếu không chứng minh được trùng split và nguồn, chỉ trình bày hai kết quả riêng, không kết luận mô hình nào tốt hơn.
@@ -390,8 +363,31 @@ python run_lab5.py \
 **Yêu cầu chung:** Part A: IMDB baseline và 1 ablation, so sánh với Lab 4, ít nhất 10 lỗi; Part B: một run PhoBERT, so sánh Lab 2, ít nhất 5 lỗi; W&B ít nhất 2 runs hoặc log offline tương đương. Nâng cao: freeze encoder, partial fine-tuning, LoRA, hoặc ablation max_length trên tiếng Việt.
 
 
-# Checklist nộp bài phiên bản mới
 
-- Part A: DistilBERT trên IMDB + 1 ablation + so sánh với Lab 4.
-- Part B: PhoBERT trên VietNewsSense + cùng split Lab 2 + 5 lỗi.
-- Có tokenization audit, accuracy, macro-F1, confusion matrix và bảng so sánh.
+# Yêu cầu nộp bài
+
+Sinh viên cần nộp repo GitHub cá nhân gồm:
+
+- mã nguồn đã chạy được;
+- `reports/analysis_report.md` đã điền đầy đủ;
+- output metrics;
+- learning curves;
+- confusion matrix;
+- error analysis;
+- bảng ablation;
+- link hoặc tên W&B run;
+- mô tả phần nâng cao nếu có.
+
+# Câu hỏi thảo luận cuối bài
+
+1. Vì sao Transformer có thể xử lý phụ thuộc dài tốt hơn RNN/LSTM/GRU?
+2. `max_length` ảnh hưởng như thế nào đến kết quả và thời gian chạy?
+3. Khi nào nên freeze encoder?
+4. Khi nào nên full fine-tuning?
+5. PEFT/LoRA phù hợp trong trường hợp nào?
+6. Transformer có giải quyết hết lỗi của LSTM/GRU không?
+7. Nếu triển khai trên máy yếu, bạn chọn cấu hình nào?
+
+# Kết luận
+
+Lab 5 là bước chuyển từ mô hình chuỗi huấn luyện từ đầu sang mô hình pretrained Transformer. Qua bài lab này, sinh viên cần hiểu rằng kết quả tốt không chỉ đến từ việc chọn mô hình mạnh hơn, mà còn đến từ cách tokenize dữ liệu, chọn `max_length`, quản lý learning rate, theo dõi thí nghiệm bằng W&B và phân tích lỗi một cách có hệ thống.

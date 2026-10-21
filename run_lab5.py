@@ -93,9 +93,12 @@ def main() -> None:
     device = get_device(prefer_mps=args.prefer_mps)
 
     out_dir = Path(args.output_dir)
-    if args.language == 'vi' and 'phobert' in args.model_name.lower() and args.vi_segment == 'none':
-        raise ValueError('PhoBERT needs word-segmented input; select --vi_segment.')
+    if 'phobert' in args.model_name.lower():
+        if args.language != 'vi' or args.vi_segment == 'none':
+            raise ValueError('PhoBERT requires --language vi and segmented input (--vi_segment).')
     if args.lab2_metrics_path:
+        if args.dataset != 'local_csv' or args.language != 'vi':
+            raise ValueError('--lab2_metrics_path is intended for Vietnamese local_csv runs only.')
         if not args.split_dir:
             raise ValueError('Lab 2 comparison requires --split_dir.')
         if Path(args.split_dir).resolve() != (Path(args.lab2_metrics_path).resolve().parent.parent / 'splits').resolve():
@@ -114,6 +117,11 @@ def main() -> None:
         seed=args.seed,
         split_dir=args.split_dir,
     )
+    if args.lab2_metrics_path:
+        from src.utils import load_json
+        source = load_json(args.lab2_metrics_path)
+        if any(source.get('splits', {}).get(k) != len(splits[k]) for k in ('train', 'val', 'test')):
+            raise ValueError('Lab 2 baseline split sizes differ from selected --split_dir.')
     if args.language == 'vi':
         splits = segment_splits(splits, args.vi_segment, args.vncorenlp_dir)
     save_json({str(i): name for i,name in enumerate(label_names)}, out_dir / 'logs' / 'id2label.json')

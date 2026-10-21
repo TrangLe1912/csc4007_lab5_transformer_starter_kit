@@ -1,108 +1,91 @@
 from __future__ import annotations
-
 from pathlib import Path
-from typing import Dict
-
+import unicodedata
+import math
 import pandas as pd
 from sklearn.model_selection import train_test_split
 
 
-def _normalize_label(value):
-    if isinstance(value, str):
-        v = value.strip().lower()
-        if v in {'positive', 'pos', '1', 'true'}:
-            return 1
-        if v in {'negative', 'neg', '0', 'false'}:
-            return 0
-    return int(value)
-
-
-def _normalize_df(df: pd.DataFrame, text_col: str = 'text', label_col: str = 'label') -> pd.DataFrame:
+def clean_frame(df, text_col="text", label_col="label"):
     if text_col not in df.columns or label_col not in df.columns:
-        raise ValueError(f'CSV phải có cột {text_col!r} và {label_col!r}. Cột hiện có: {list(df.columns)}')
-    out = df[[text_col, label_col]].copy()
-    out.columns = ['text', 'label']
-    out['text'] = out['text'].astype(str).fillna('').str.strip()
-    out = out[out['text'].str.len() > 0].copy()
-    out['label'] = out['label'].map(_normalize_label).astype(int)
-    out = out[out['label'].isin([0, 1])].reset_index(drop=True)
+        raise ValueError(f"Missing {text_col}/{label_col}; columns: {list(df.columns)}")
+    if text_col != "text" and "text" in df.columns:
+        raise ValueError("Ambiguous text column")
+    if label_col != "label" and "label" in df.columns:
+        raise ValueError("Ambiguous label column")
+    out = df.copy().rename(columns={text_col: "text", label_col: "label"})
+    out = out.dropna(subset=["text", "label"]).copy()
+    out["text"] = out["text"].map(lambda x: unicodedata.normalize("NFC", str(x)).strip())
+    out = out[out["text"].str.len() > 0].reset_index(drop=True)
     if out.empty:
-        raise ValueError('Không còn dòng hợp lệ sau khi làm sạch dữ liệu.')
+        raise ValueError("No valid text rows")
     return out
 
 
-def _limit_rows(df: pd.DataFrame, max_rows: int | None, seed: int) -> pd.DataFrame:
+def limit_rows(df, max_rows, seed):
     if max_rows is None or max_rows <= 0 or len(df) <= max_rows:
         return df.reset_index(drop=True)
-    # Keep label ratio when possible.
-    try:
-        return df.groupby('label', group_keys=False).apply(
-            lambda x: x.sample(max(1, round(max_rows * len(x) / len(df))), random_state=seed)
-        ).sample(frac=1, random_state=seed).head(max_rows).reset_index(drop=True)
-    except Exception:
-        return df.sample(n=max_rows, random_state=seed).reset_index(drop=True)
+    return df.groupby("label", group_keys=False).apply(
+        lambda g: g.sample(min(len(g), max(1, round(max_rows * len(g) / len(df)))),
+                           random_state=seed)
+    ).sample(frac=1, random_state=seed).head(max_rows).reset_index(drop=True)
 
 
-def load_imdb(max_rows: int | None = None, seed: int = 42, val_size: float = 0.1) -> Dict[str, pd.DataFrame]:
-    try:
+def stratify_for(df, fraction):
+    counts = df["label"].value_counts()
+    n_test = int(math.ceil(fraction * len(df)))
+    return df["label"] if (len(counts) > 1 and counts.min() >= 2 and
+                            min(n_test, len(df) - n_test) >= len(counts)) else None
+
+
+def prepare_splits(name, data_path=None, text_col="text", label_col="label",
+                   max_rows=None, seed=42, split_dir=None):
+    if name not in ("imdb", "local_csv"):
+        raise ValueError(f"Unsupported dataset: {name}")
+    if split_dir:
+        if max_rows is not None:
+            raise ValueError("--max_rows may not be combined with --split_dir")
+        root = Path(split_dir)
+        splits = {
+            part: clean_frame(pd.read_csv(root / f"{part}.csv"), text_col, label_col)
+            for part in ("train", "val", "test")
+        }
+    elif name == "imdb":
         from datasets import load_dataset
-    except ImportError as exc:
-        raise ImportError('Cần cài thư viện datasets: pip install datasets') from exc
-
-    ds = load_dataset('imdb')
-    train_df = pd.DataFrame(ds['train'])[['text', 'label']]
-    test_df = pd.DataFrame(ds['test'])[['text', 'label']]
-
-    if max_rows is not None:
-        # Use subsets for fast local runs. Test uses a smaller but still balanced subset.
-        train_df = _limit_rows(train_df, max_rows=max_rows, seed=seed)
-        test_df = _limit_rows(test_df, max_rows=max(20, int(max_rows * 0.4)), seed=seed + 1)
-
-    stratify = train_df['label'] if train_df['label'].nunique() == 2 and len(train_df) >= 20 else None
-    train_df, val_df = train_test_split(
-        train_df,
-        test_size=val_size,
-        random_state=seed,
-        stratify=stratify,
-    )
-    return {
-        'train': _normalize_df(train_df),
-        'val': _normalize_df(val_df),
-        'test': _normalize_df(test_df),
-    }
-
-
-def load_local_csv(
-    data_path: str | Path,
-    text_col: str = 'text',
-    label_col: str = 'label',
-    seed: int = 42,
-    max_rows: int | None = None,
-) -> Dict[str, pd.DataFrame]:
-    df = pd.read_csv(data_path)
-    df = _normalize_df(df, text_col=text_col, label_col=label_col)
-    df = _limit_rows(df, max_rows=max_rows, seed=seed)
-
-    # Teaching-friendly split. For tiny CSV, fall back when stratification is impossible.
-    stratify = df['label'] if df['label'].nunique() == 2 and df['label'].value_counts().min() >= 3 else None
-    train_val, test = train_test_split(df, test_size=0.2, random_state=seed, stratify=stratify)
-    stratify_tv = train_val['label'] if train_val['label'].nunique() == 2 and train_val['label'].value_counts().min() >= 3 else None
-    train, val = train_test_split(train_val, test_size=0.2, random_state=seed, stratify=stratify_tv)
-    return {'train': train.reset_index(drop=True), 'val': val.reset_index(drop=True), 'test': test.reset_index(drop=True)}
-
-
-def prepare_splits(
-    name: str,
-    data_path: str | None = None,
-    text_col: str = 'text',
-    label_col: str = 'label',
-    max_rows: int | None = None,
-    seed: int = 42,
-) -> Dict[str, pd.DataFrame]:
-    if name == 'imdb':
-        return load_imdb(max_rows=max_rows, seed=seed)
-    if name == 'local_csv':
+        ds = load_dataset("imdb")
+        train = limit_rows(pd.DataFrame(ds["train"])[["text", "label"]], max_rows, seed)
+        test = limit_rows(pd.DataFrame(ds["test"])[["text", "label"]],
+                          max(20, int(max_rows * 0.4)) if max_rows else None, seed + 1)
+        train, val = train_test_split(train, test_size=0.1, random_state=seed,
+                                     stratify=stratify_for(train, 0.1))
+        splits = {part: clean_frame(df) for part, df in
+                  {"train": train, "val": val, "test": test}.items()}
+    else:
         if not data_path:
-            raise ValueError('dataset=local_csv cần --data_path')
-        return load_local_csv(data_path, text_col=text_col, label_col=label_col, seed=seed, max_rows=max_rows)
-    raise ValueError(f'Unknown dataset: {name}')
+            raise ValueError("--data_path or --split_dir is required for local_csv")
+        df = limit_rows(clean_frame(pd.read_csv(data_path), text_col, label_col),
+                        max_rows, seed)
+        train, rest = train_test_split(df, test_size=0.2, random_state=seed,
+                                       stratify=stratify_for(df, 0.2))
+        val, test = train_test_split(rest, test_size=0.5, random_state=seed,
+                                     stratify=stratify_for(rest, 0.5))
+        splits = {part: d.reset_index(drop=True) for part, d in
+                  {"train": train, "val": val, "test": test}.items()}
+
+    # A stable label vocabulary shared by train, val, test.
+    names = (["negative", "positive"] if name == "imdb"
+             else sorted({str(v).strip() for d in splits.values() for v in d["label"]}))
+    if len(names) < 2:
+        raise ValueError("At least two labels are required")
+    label_to_id = ({str(i): i for i in range(2)} if name == "imdb"
+                   else {x: i for i, x in enumerate(names)})
+    for part, df in splits.items():
+        df["label_name"] = df["label"].map(
+            lambda x: names[int(x)] if name == "imdb" else str(x).strip())
+        df["label"] = df["label"].map(lambda x: label_to_id.get(str(x).strip()))
+        if df["label"].isna().any():
+            raise ValueError(f"Unknown labels in {part}")
+        df["label"] = df["label"].astype(int)
+    if set(splits["train"]["label"]) != set(range(len(names))):
+        raise ValueError("Train does not contain every class in the dataset")
+    return splits, names

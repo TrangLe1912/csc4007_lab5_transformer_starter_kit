@@ -23,6 +23,10 @@ jobs:
           test -f src/modeling.py
           test -f src/train_transformer.py
           test -f src/wandb_utils.py
+      - name: Install data test dependencies
+        run: pip install pandas scikit-learn
+      - name: Test multiclass data and split reuse
+        run: python -m unittest discover -s tests -v
       - name: Python syntax check
         run: |
           python -m py_compile run_lab5.py src/*.py

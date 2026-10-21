@@ -1,4 +1,5 @@
 # CSC4007 — Lab 5: Transformer Fine-tuning + Weights & Biases
+## IMDB Core Lab + VietNewsSense Vietnamese Transfer Challenge
 
 ## Giới thiệu bài thực hành
 
@@ -400,3 +401,44 @@ Repo có workflow kiểm tra:
 - smoke test với tiny Transformer và dữ liệu nhỏ.
 
 CI giúp kiểm tra repo có chạy được hay không, nhưng không thay thế phần phân tích học thuật trong báo cáo.
+
+
+
+## Part B — VietNewsSense Vietnamese Transfer Challenge (bắt buộc)
+
+**Mục tiêu:** chuyển từ DistilBERT + IMDB (phân loại cảm xúc 2 nhãn) sang PhoBERT + VietNewsSense (phân loại chủ đề đa lớp). Kết quả đối chiếu với TF-IDF + Linear SVM của Lab 2 **trên cùng split**.
+
+### Dữ liệu và nguồn so sánh
+- Dùng `outputs/vietnews_v1_segmented/splits/{train,val,test}.csv` và `outputs/vietnews_v1_segmented/metrics/metrics_summary.json` từ **cùng một run Lab 2**.
+- Tên cột khi xuất từ Lab 2 là `text` và `label`. CSV gốc có thể dùng `content` và `category`; các metadata như `id,title,source` được giữ lại.
+- Giữ nguyên train/val/test; **không dùng --max_rows với --split_dir**, không resplit hoặc chọn hyperparameters theo test.
+- Nếu Lab 2 đã segment bằng underthesea (`V1`), không dùng trực tiếp làm đầu vào PhoBERT khi muốn đúng pipeline VnCoreNLP: hãy dùng split V0 chưa segment, hoặc bản raw được chia theo cùng ID, chạy lại segmentation phù hợp, và dùng metric Lab 2 tương ứng với **chính split đó**. Nếu không chứng minh được trùng split và nguồn, chỉ trình bày hai kết quả riêng, không kết luận mô hình nào tốt hơn.
+- Để dùng PhoBERT đúng hướng dẫn, ưu tiên `--vi_segment vncorenlp --vncorenlp_dir ...`. `--vi_segment underthesea` chỉ dành cho thử nghiệm với ghi chú khác biệt tokenizer; `presegmented` chỉ dùng nếu dữ liệu đã segment đúng bằng pipeline phù hợp.
+- Dataset trong repo chỉ có *sample tiny* để kiểm thử, **không** phải bộ benchmark đầy đủ và không được dùng số liệu tiny để kết luận học thuật.
+
+### Lệnh chạy mẫu (sau khi chuẩn bị split VietNewsSense chưa segment từ Lab 2)
+
+```bash
+pip install -r requirements.txt
+pip install py_vncorenlp
+# Chuẩn bị thư mục VnCoreNLP và Java theo tài liệu py_vncorenlp.
+python run_lab5.py \
+  --dataset local_csv \
+  --split_dir /path/to/lab2/outputs/vietnews_v0/splits \
+  --text_col text --label_col label --language vi \
+  --vi_segment vncorenlp --vncorenlp_dir /path/to/VnCoreNLP \
+  --model_name vinai/phobert-base-v2 \
+  --max_length 128 --batch_size 8 --epochs 2 --lr 2e-5 \
+  --seed 42 --use_wandb --wandb_mode offline \
+  --output_dir outputs/vietnews_phobert \
+  --run_name vietnews_phobert_baseline \
+  --lab2_metrics_path /path/to/lab2/outputs/vietnews_v0/metrics/metrics_summary.json
+```
+
+**Các bước bắt buộc:** B1. Kiểm tra split, nhãn, metadata → B2. Audit tokenizer/truncation → B3. Fine-tune PhoBERT → B4. So sánh Macro-F1, accuracy và confusion matrix với Lab 2 trên cùng split → B5. Phân tích ít nhất 5 mẫu dự đoán sai.
+
+**Bản IMDB:** giữ nguyên lệnh chạy DistilBERT hiện có; bổ sung `--output_dir outputs/imdb` nếu muốn tách kết quả.
+
+**Output mới:** `outputs/vietnews_phobert/metrics/vietnews_comparison.csv`, `logs/id2label.json`, `logs/tokenization_audit.md`, `predictions/test_predictions.csv` (bao gồm xác suất từng nhãn), confusion matrix đa lớp và error analysis.
+
+**Yêu cầu chung:** Part A: IMDB baseline và 1 ablation, so sánh với Lab 4, ít nhất 10 lỗi; Part B: một run PhoBERT, so sánh Lab 2, ít nhất 5 lỗi; W&B ít nhất 2 runs hoặc log offline tương đương. Nâng cao: freeze encoder, partial fine-tuning, LoRA, hoặc ablation max_length trên tiếng Việt.

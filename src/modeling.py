@@ -6,11 +6,13 @@ import torch
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
 
-def load_tokenizer_and_model(model_name: str, num_labels: int = 2, cache_dir: str | None = None):
+def load_tokenizer_and_model(model_name: str, num_labels: int = 2, cache_dir: str | None = None, label_names: list[str] | None = None):
     tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True, cache_dir=cache_dir)
     model = AutoModelForSequenceClassification.from_pretrained(
         model_name,
         num_labels=num_labels,
+        id2label={i:n for i,n in enumerate(label_names)} if label_names else None,
+        label2id={n:i for i,n in enumerate(label_names)} if label_names else None,
         ignore_mismatched_sizes=True,
         cache_dir=cache_dir,
     )

@@ -55,16 +55,17 @@ def plot_training_curves(history: list[dict[str, Any]], fig_dir: str | Path) -> 
     plt.close()
 
 
-def plot_confusion_matrix(y_true, y_pred, path: str | Path) -> None:
+def plot_confusion_matrix(y_true, y_pred, path: str | Path, label_names: list[str] | None = None) -> None:
     path = Path(path)
     ensure_dir(path.parent)
-    cm = confusion_matrix(y_true, y_pred, labels=[0, 1])
-    fig, ax = plt.subplots(figsize=(5, 4))
+    label_names = label_names or ['negative', 'positive']
+    cm = confusion_matrix(y_true, y_pred, labels=list(range(len(label_names))))
+    fig, ax = plt.subplots(figsize=(max(5, len(label_names)), max(4, len(label_names)*0.85)))
     im = ax.imshow(cm)
-    ax.set_xticks([0, 1])
-    ax.set_yticks([0, 1])
-    ax.set_xticklabels(['negative', 'positive'])
-    ax.set_yticklabels(['negative', 'positive'])
+    ax.set_xticks(range(len(label_names)))
+    ax.set_yticks(range(len(label_names)))
+    ax.set_xticklabels(label_names, rotation=45, ha='right')
+    ax.set_yticklabels(label_names)
     ax.set_xlabel('Predicted')
     ax.set_ylabel('True')
     ax.set_title('Confusion Matrix')
@@ -138,6 +139,19 @@ def create_model_comparison(
         'trainable_params': transformer_metrics.get('trainable_params'),
         'notes': 'Transformer fine-tuning result',
     })
+    output_path = Path(output_path)
+    ensure_dir(output_path.parent)
+    pd.DataFrame(rows).to_csv(output_path, index=False)
+
+
+def create_transfer_comparison(lab2_metrics_path: str, transformer_metrics: dict, output_path: str | Path) -> None:
+    lab2 = load_json(lab2_metrics_path)
+    if lab2.get('dataset') != 'local_csv' or transformer_metrics['dataset'] != 'local_csv':
+        raise ValueError('Both experiments must use local_csv')
+    rows = [
+        {'lab':'Lab 2', 'model': f"{lab2.get('vectorizer')} + {lab2.get('model')}", 'accuracy':lab2['test']['accuracy'], 'macro_f1':lab2['test']['macro_f1']},
+        {'lab':'Lab 5', 'model': transformer_metrics['model_name'], 'accuracy':transformer_metrics['test']['accuracy'], 'macro_f1':transformer_metrics['test']['macro_f1']},
+    ]
     output_path = Path(output_path)
     ensure_dir(output_path.parent)
     pd.DataFrame(rows).to_csv(output_path, index=False)

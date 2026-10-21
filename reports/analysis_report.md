@@ -133,3 +133,23 @@ Viết 5–7 câu trả lời:
 2. Transformer khác RNN/LSTM/GRU ở điểm nào trong thực nghiệm?
 3. Khi nào nên dùng full fine-tuning, freeze encoder, hoặc LoRA?
 4. Nếu triển khai trên máy yếu, bạn chọn cấu hình nào?
+
+
+---
+## 11. Part B – VietNewsSense Transfer Challenge
+
+**Nguồn VietNewsSense và phiên bản:**  
+**Cùng split với run nào của Lab 2 (đường dẫn/hash, ID mẫu):**  
+**Nhãn và số lớp:**  
+**PhoBERT model:** `vinai/phobert-base-v2`  
+**Công cụ word segmentation, tokenizer:**  
+**max_length; tỷ lệ truncation:**  
+
+| Model | Dataset/split | Accuracy | Macro-F1 | Ghi chú |
+|---|---|---:|---:|---|
+| TF-IDF + Linear SVM – Lab 2 | VietNewsSense | | | |
+| PhoBERT – Lab 5 | VietNewsSense | | | |
+
+Trình bày confusion matrix đa lớp và ít nhất **5 mẫu PhoBERT dự đoán sai** (câu, nhãn đúng/dự đoán, khả năng nhầm chủ đề, nguyên nhân, cách cải thiện). Nêu bằng chứng về cùng split; nếu không, ghi rõ không so sánh trực tiếp.
+
+**Kết luận:** Với cùng dữ liệu, khi nào PhoBERT đáng dùng thay cho TF-IDF + SVM xét cả hiệu năng lẫn chi phí?

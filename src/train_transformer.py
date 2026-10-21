@@ -183,9 +183,7 @@ def train_model(
 @torch.no_grad()
 def predict_dataframe(model, loader: DataLoader, device: torch.device) -> pd.DataFrame:
     _, _, y_true, y_pred, y_prob = evaluate_model(model, loader, device)
-    return pd.DataFrame({
-        'true_label': y_true,
-        'pred_label': y_pred,
-        'prob_negative': y_prob[:, 0] if y_prob.ndim == 2 and y_prob.shape[1] > 0 else np.nan,
-        'prob_positive': y_prob[:, 1] if y_prob.ndim == 2 and y_prob.shape[1] > 1 else np.nan,
-    })
+    result = pd.DataFrame({'true_label': y_true, 'pred_label': y_pred, 'confidence': y_prob.max(axis=1)})
+    for i in range(y_prob.shape[1]):
+        result[f'prob_label_{i}'] = y_prob[:, i]
+    return result
